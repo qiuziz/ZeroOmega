@@ -44,7 +44,8 @@
     "unlimitedStorage",
     "webRequest",
     "webRequestAuthProvider",
-    "contextMenus"
+    "contextMenus",
+    "offscreen"
   ],
   "host_permissions": ["<all_urls>"]
 }

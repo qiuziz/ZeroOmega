@@ -59,6 +59,7 @@ class ChromeOptions extends OmegaTarget.Options
           @ready.then( =>
             @updateProfile()
           )
+    @setupFastSync()
     chrome.contextMenus?.onClicked.addListener((info, tab) =>
       @ready.then( =>
         switch info.menuItemId
@@ -286,6 +287,44 @@ class ChromeOptions extends OmegaTarget.Options
             })
         port.onDisconnect.addListener =>
           delete @_tabRequestInfoPorts[tabId] if tabId?
+
+  # proxyman-pac integration: refresh rule lists as soon as the local
+  # rule server reports a new snapshot, instead of waiting for the alarm.
+  # Polls from the service worker itself; offscreen documents get reclaimed
+  # by Chrome and stop the poller.
+  setupFastSync: ->
+    return if @_fastSyncSetup
+    @_fastSyncSetup = true
+    lastStamp = null
+    polling = false
+    tick = =>
+      return if polling
+      polling = true
+      fetch('http://127.0.0.1:8899/health', {cache: 'no-store'})
+        .then((res) -> if res.ok then res.json() else null)
+        .then((data) =>
+          polling = false
+          return unless data?.ok and data.generated_at
+          if lastStamp is null
+            lastStamp = data.generated_at
+            return
+          return if data.generated_at is lastStamp
+          lastStamp = data.generated_at
+          @ready.then(=> @updateProfile(null, true))
+        )
+        .catch(-> polling = false)
+    debounce = null
+    trigger = ->
+      return if debounce
+      debounce = setTimeout((->
+        debounce = null
+        tick()
+      ), 500)
+    chrome.tabs?.onUpdated?.addListener (tabId, info) ->
+      trigger() if info?.status in ['loading', 'complete']
+    chrome.tabs?.onActivated?.addListener -> trigger()
+    tick()
+    setInterval(tick, 2000)
 
   schedule: (name, periodInMinutes) ->
     name = 'omega.' + name

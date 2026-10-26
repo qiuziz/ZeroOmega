@@ -3,3 +3,4 @@ bower_components
 package-lock.json
 *-release.zip
 *.swp
+dist/
